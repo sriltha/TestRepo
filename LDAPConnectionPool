@@ -1,0 +1,33 @@
+@Bean
+public LDAPConnectionPool ldapConnectionPool() throws LDAPException {
+    String[] hosts = {"ldap1.com", "ldap2.com", "ldap3.com"};
+    int[] ports = {389, 389, 389};
+    
+    FailoverServerSet failoverSet = new FailoverServerSet(hosts, ports);
+    BindRequest bindRequest = new SimpleBindRequest("cn=admin", "password");
+
+    LDAPConnectionPool pool = new LDAPConnectionPool(failoverSet, bindRequest, 5, 20);
+    
+    // 1. Capture TTL and usage stats
+    pool.setCreateStackTrace(true); // Helps debug leaked connections
+    
+    // 2. Set the custom health check we defined above
+    pool.setHealthCheck(new DetailedHealthCheck());
+
+    return pool;
+}
+
+// Example usage with error capturing
+public void searchLdap(LDAPConnectionPool pool) {
+    try {
+        SearchResult result = pool.search("dc=example,dc=com", SearchScope.SUB, "(uid=jdoe)");
+    } catch (LDAPException e) {
+        if (e.getResultCode() == ResultCode.SERVER_DOWN) {
+            // This happens if ALL 3 servers in your failover set are unreachable
+            log.error("Total Outage: All LDAP nodes in the failover set are down.");
+        } else if (e.getResultCode() == ResultCode.TIMEOUT) {
+            log.warn("LDAP query timed out - consider increasing connectTimeout.");
+        }
+        log.error("LDAP Error: " + e.getMessage());
+    }
+}
