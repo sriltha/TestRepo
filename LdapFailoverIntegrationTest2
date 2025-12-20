@@ -1,0 +1,84 @@
+package com.enterprise.ldap;
+
+import com.enterprise.ldap.config.LdapAutoConfiguration;
+import com.enterprise.ldap.config.LdapProperties;
+import com.unboundid.ldap.listener.InMemoryDirectoryServer;
+import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
+import com.unboundid.ldap.sdk.*;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ContextConfiguration;
+
+import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@Slf4j
+@SpringBootTest
+@ContextConfiguration(classes = {LdapAutoConfiguration.class})
+public class LdapFailoverIntegrationTest {
+
+    @Autowired
+    private LDAPConnectionPool ldapPool;
+
+    private InMemoryDirectoryServer primaryServer;
+    private InMemoryDirectoryServer secondaryServer;
+
+    @BeforeEach
+    void setupServers() throws Exception {
+        // 1. Setup Primary Server (dc=example,dc=com)
+        InMemoryDirectoryServerConfig config1 = new InMemoryDirectoryServerConfig("dc=example,dc=com");
+        config1.addAdditionalBindCredentials("cn=admin", "password");
+        primaryServer = new InMemoryDirectoryServer(config1);
+        primaryServer.startListening();
+
+        // 2. Setup Secondary Server
+        InMemoryDirectoryServerConfig config2 = new InMemoryDirectoryServerConfig("dc=example,dc=com");
+        config2.addAdditionalBindCredentials("cn=admin", "password");
+        secondaryServer = new InMemoryDirectoryServer(config2);
+        secondaryServer.startListening();
+
+        log.info("Primary LDAP Port: {}", primaryServer.getListenPort());
+        log.info("Secondary LDAP Port: {}", secondaryServer.getListenPort());
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (primaryServer != null) primaryServer.shutDown(true);
+        if (secondaryServer != null) secondaryServer.shutDown(true);
+    }
+
+    @Test
+    @DisplayName("Should transparently failover to secondary node when primary goes down")
+    void testFailoverTransparency() throws Exception {
+        // Manually update properties to use our dynamic ports
+        // (In a real enterprise app, you'd use a TestInitializer to set these)
+        
+        // 1. Initial State: Primary is UP. 
+        // We perform a search and verify it hits the Primary port.
+        try (LDAPConnection conn = ldapPool.getConnection()) {
+            assertThat(conn.getConnectedPort()).isEqualTo(primaryServer.getListenPort());
+            log.info("Successfully connected to Primary node.");
+        }
+
+        // 2. TRIGGER FAILOVER: Kill the Primary Server
+        log.warn("SHUTTING DOWN PRIMARY SERVER...");
+        primaryServer.shutDown(true);
+
+        // 3. Verify Failover: The next request should automatically go to Secondary
+        // The FailoverServerSet logic inside the pool handles this.
+        try (LDAPConnection conn = ldapPool.getConnection()) {
+            assertThat(conn.getConnectedPort()).isEqualTo(secondaryServer.getListenPort());
+            log.info("Failover Successful! Now connected to Secondary node on port: {}", conn.getConnectedPort());
+            
+            // Verify we can still perform operations
+            SearchResult result = conn.search("dc=example,dc=com", SearchScope.BASE, "(objectClass=*)");
+            assertThat(result.getResultCode()).isEqualTo(ResultCode.SUCCESS);
+        }
+    }
+}
