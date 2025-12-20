@@ -1,0 +1,56 @@
+package com.enterprise.ldap;
+
+import com.enterprise.ldap.config.LdapAutoConfiguration;
+import com.unboundid.ldap.listener.InMemoryDirectoryServer;
+import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
+import com.unboundid.ldap.sdk.*;
+import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(classes = LdapAutoConfiguration.class)
+public class LdapFailoverIntegrationTest {
+
+    @Autowired
+    private LDAPConnectionPool ldapPool;
+
+    private static InMemoryDirectoryServer primary;
+    private static InMemoryDirectoryServer secondary;
+
+    @BeforeAll
+    static void startServers() throws Exception {
+        primary = new InMemoryDirectoryServer(new InMemoryDirectoryServerConfig("dc=example,dc=com"));
+        secondary = new InMemoryDirectoryServer(new InMemoryDirectoryServerConfig("dc=example,dc=com"));
+        primary.startListening();
+        secondary.startListening();
+        
+        // System properties allow dynamic port injection for the test
+        System.setProperty("app.ldap.urls", "localhost:" + primary.getListenPort() + ",localhost:" + secondary.getListenPort());
+        System.setProperty("app.ldap.bind-dn", "cn=admin");
+        System.setProperty("app.ldap.bind-password", "password");
+    }
+
+    @Test
+    void verifyFailoverWorks() throws Exception {
+        // Confirm we are on primary
+        try (LDAPConnection conn = ldapPool.getConnection()) {
+            assertThat(conn.getConnectedPort()).isEqualTo(primary.getListenPort());
+        }
+
+        // Kill primary
+        primary.shutDown(true);
+
+        // Confirm pool moves to secondary
+        try (LDAPConnection conn = ldapPool.getConnection()) {
+            assertThat(conn.getConnectedPort()).isEqualTo(secondary.getListenPort());
+        }
+    }
+
+    @AfterAll
+    static void stop() {
+        primary.shutDown(true);
+        secondary.shutDown(true);
+    }
+}
