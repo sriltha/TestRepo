@@ -1,0 +1,40 @@
+package com.enterprise.ldap.error;
+
+import com.unboundid.ldap.sdk.LDAPException;
+import com.unboundid.ldap.sdk.ResultCode;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class LdapErrorHandler {
+
+    /**
+     * Translates UnboundID exceptions into actionable logs and business exceptions.
+     */
+    public static void handle(String operation, LDAPException e) {
+        ResultCode rc = e.getResultCode();
+
+        // 1. SSL/TLS & Certificate Errors
+        if (rc == ResultCode.LOCAL_ERROR && e.getMessage().contains("SSL")) {
+            log.error("CERTIFICATE FAILURE during {}: Check if the LDAP cert is in the JVM truststore. Error: {}", 
+                      operation, e.getMessage());
+            throw new LdapSecurityException("SSL Handshake failed", e);
+        }
+
+        // 2. Connectivity & Failover Errors
+        if (rc == ResultCode.SERVER_DOWN || rc == ResultCode.CONNECT_ERROR) {
+            log.error("NETWORK FAILURE during {}: All nodes in the failover set might be down. Code: {}", 
+                      operation, rc);
+            throw new LdapRetryableException("LDAP service unavailable", e);
+        }
+
+        // 3. Authentication & Permission Errors
+        if (rc == ResultCode.INVALID_CREDENTIALS) {
+            log.error("AUTH FAILURE: Bind DN or Certificate is invalid for operation {}.", operation);
+            throw new LdapAuthenticationException("Invalid LDAP credentials", e);
+        }
+
+        // 4. Default Fallback
+        log.error("LDAP Error during {}: [{}] {}", operation, rc.getName(), e.getMessage());
+        throw new LdapGeneralException("LDAP operation failed: " + rc.getName(), e);
+    }
+}
