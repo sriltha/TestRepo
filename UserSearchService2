@@ -1,0 +1,18 @@
+@Service
+@RequiredArgsConstructor
+public class UserSearchService {
+
+    private final LDAPConnectionPool ldapPool;
+
+    public SearchResultEntry findByUid(String uid) {
+        try {
+            // High-level operation
+            return ldapPool.getEntry("uid=" + uid + ",ou=users,dc=example,dc=com");
+        } catch (LDAPException e) {
+            // Centralized handling: This will log details and throw the correct 
+            // business exception defined in the shared module.
+            LdapErrorHandler.handle("User Search for: " + uid, e);
+            return null; // Unreachable due to exception thrown above
+        }
+    }
+}
