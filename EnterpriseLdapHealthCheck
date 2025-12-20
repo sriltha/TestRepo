@@ -1,0 +1,18 @@
+package com.enterprise.ldap.config;
+
+import com.unboundid.ldap.sdk.*;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class EnterpriseLdapHealthCheck extends GetEntryLDAPConnectionPoolHealthCheck {
+    public EnterpriseLdapHealthCheck(String entryDn) {
+        super(entryDn, 1000L, true, true, true, true, true, null);
+    }
+
+    @Override
+    public void ensureConnectionValidAfterException(LDAPConnection connection, LDAPException exception) throws LDAPException {
+        log.error("FAILOVER EVENT: Node {}:{} failed. Reason: {}", 
+                  connection.getConnectedAddress(), connection.getConnectedPort(), exception.getMessage());
+        super.ensureConnectionValidAfterException(connection, exception);
+    }
+}
