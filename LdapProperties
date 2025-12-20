@@ -1,0 +1,17 @@
+package com.enterprise.ldap.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import java.util.List;
+
+@Data
+@ConfigurationProperties(prefix = "app.ldap")
+public class LdapProperties {
+    private List<String> urls;
+    private String bindDn;
+    private String bindPassword;
+    private int minPoolSize = 5;
+    private int maxPoolSize = 20;
+    private long ttlMillis = 3600000; // 1 hour
+    private String healthBaseDn;
+}
