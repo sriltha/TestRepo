@@ -1,0 +1,6 @@
+LDAPConnectionPoolStatistics stats = pool.getStatistics();
+long closedByAge = stats.getNumConnectionsClosedByMaxAge();
+long failedCheckouts = stats.getNumFailedCheckouts();
+long successfulConnections = stats.getNumSuccessfulConnectionAttempts();
+
+System.out.println("Connections closed due to TTL: " + closedByAge);
