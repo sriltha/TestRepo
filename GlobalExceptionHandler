@@ -1,0 +1,42 @@
+@RestControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler {
+
+    // 1. Handle Connectivity / Failover Issues (503 Service Unavailable)
+    @ExceptionHandler(LdapRetryableException.class)
+    public ResponseEntity<ApiErrorResponse> handleLdapRetryable(LdapRetryableException ex, HttpServletRequest request) {
+        log.error("LDAP Connection Error: {}", ex.getMessage());
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "LDAP service is currently down or failing over.", request);
+    }
+
+    // 2. Handle Security / Certificate Issues (500 Internal Server Error)
+    @ExceptionHandler(LdapSecurityException.class)
+    public ResponseEntity<ApiErrorResponse> handleLdapSecurity(LdapSecurityException ex, HttpServletRequest request) {
+        log.error("LDAP Security Configuration Error: {}", ex.getMessage());
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "A security configuration error occurred.", request);
+    }
+
+    // 3. Handle Authentication Errors (401 Unauthorized)
+    @ExceptionHandler(LdapAuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleLdapAuth(LdapAuthenticationException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
+    }
+
+    // 4. Fallback for all other unexpected RuntimeExceptions
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorResponse> handleGeneral(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled Exception: ", ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred.", request);
+    }
+
+    private ResponseEntity<ApiErrorResponse> buildResponse(HttpStatus status, String message, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                LocalDateTime.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                message,
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(error, status);
+    }
+}
