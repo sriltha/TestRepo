@@ -1,0 +1,32 @@
+package com.enterprise.ldap.config;
+
+import com.unboundid.ldap.sdk.*;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+
+@AutoConfiguration
+@EnableConfigurationProperties(LdapProperties.class)
+public class LdapAutoConfiguration {
+
+    @Bean(destroyMethod = "close")
+    public LDAPConnectionPool ldapConnectionPool(LdapProperties props) throws LDAPException {
+        String[] hosts = new String[props.getUrls().size()];
+        int[] ports = new int[props.getUrls().size()];
+        
+        for (int i = 0; i < props.getUrls().size(); i++) {
+            String[] parts = props.getUrls().get(i).split(":");
+            hosts[i] = parts[0];
+            ports[i] = Integer.parseInt(parts[1]);
+        }
+
+        FailoverServerSet failoverSet = new FailoverServerSet(hosts, ports);
+        BindRequest bindRequest = new SimpleBindRequest(props.getBindDn(), props.getBindPassword());
+
+        LDAPConnectionPool pool = new LDAPConnectionPool(failoverSet, bindRequest, props.getMinPoolSize(), props.getMaxPoolSize());
+        pool.setMaxConnectionAgeMillis(props.getTtlMillis());
+        pool.setHealthCheck(new EnterpriseLdapHealthCheck(props.getHealthBaseDn()));
+        
+        return pool;
+    }
+}
