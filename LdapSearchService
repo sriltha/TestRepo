@@ -1,0 +1,34 @@
+import com.unboundid.ldap.sdk.*;
+import org.springframework.stereotype.Service;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class LdapSearchService {
+
+    private final LDAPConnectionPool pool;
+
+    public SearchResultEntry findUser(String uid) {
+        try {
+            // Using pool.search directly handles failover automatically
+            return pool.getEntry("uid=" + uid + ",ou=users,dc=example,dc=com");
+        } catch (LDAPException e) {
+            // Handle exceptions specifically
+            if (e.getResultCode() == ResultCode.SERVER_DOWN) {
+                log.error("CRITICAL: All LDAP servers in failover set are unreachable.");
+            }
+            throw new RuntimeException("LDAP Search Failed", e);
+        }
+    }
+    
+    // Scheduled task to monitor pool health
+    public void logPoolStats() {
+        LDAPConnectionPoolStatistics stats = pool.getStatistics();
+        log.info("LDAP Pool Stats - Active: {}, Closed(TTL): {}, Failed: {}", 
+                 stats.getNumAvailableConnections(), 
+                 stats.getNumConnectionsClosedByMaxAge(),
+                 stats.getNumFailedCheckouts());
+    }
+}
