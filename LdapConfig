@@ -1,0 +1,37 @@
+import com.unboundid.ldap.sdk.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class LdapConfig {
+
+    @Bean(destroyMethod = "close")
+    public LDAPConnectionPool ldapConnectionPool() throws LDAPException {
+        // 1. Define your 3 LDAP URLs (host and port)
+        String[] hosts = {"ldap1.example.com", "ldap2.example.com", "ldap3.example.com"};
+        int[] ports = {389, 389, 389};
+
+        // 2. Create the FailoverServerSet
+        // It tries host1, then host2, then host3 if the previous ones are down.
+        FailoverServerSet failoverSet = new FailoverServerSet(hosts, ports);
+
+        // 3. Define Authentication
+        BindRequest bindRequest = new SimpleBindRequest("cn=admin,dc=example,dc=com", "password");
+
+        // 4. Initialize the Pool
+        // Arguments: ServerSet, BindRequest, InitialConnections, MaxConnections
+        LDAPConnectionPool pool = new LDAPConnectionPool(failoverSet, bindRequest, 10, 50);
+
+        // 5. Configure TTL (Maximum Connection Age)
+        // This ensures connections are closed and recreated after a certain period (e.g., 1 hour).
+        long maxAgeMillis = 3600000L; // 1 hour in milliseconds
+        pool.setMaxConnectionAgeMillis(maxAgeMillis);
+
+        // 6. Optional: Health Check configuration
+        // Re-validates connections before handing them to the application
+        pool.setHealthCheck(new GetEntryLDAPConnectionPoolHealthCheck(
+                "dc=example,dc=com", 500L, true, true, true, true, true, null));
+
+        return pool;
+    }
+}
