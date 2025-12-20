@@ -1,0 +1,45 @@
+import com.unboundid.ldap.sdk.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import lombok.RequiredArgsConstructor;
+
+@Configuration
+@RequiredArgsConstructor
+public class UnboundIdLdapConfig {
+
+    private final LdapProperties properties;
+
+    @Bean(destroyMethod = "close")
+    public LDAPConnectionPool ldapConnectionPool() throws LDAPException {
+        // Parse addresses and ports from URLs
+        String[] addresses = new String[properties.getUrls().size()];
+        int[] ports = new int[properties.getUrls().size()];
+        
+        for (int i = 0; i < properties.getUrls().size(); i++) {
+            String[] parts = properties.getUrls().get(i).split(":");
+            addresses[i] = parts[0];
+            ports[i] = Integer.parseInt(parts[1]);
+        }
+
+        // 1. Failover Configuration
+        FailoverServerSet failoverSet = new FailoverServerSet(addresses, ports);
+        
+        // 2. Connection Options
+        LDAPConnectionOptions options = new LDAPConnectionOptions();
+        options.setConnectTimeoutMillis((int) properties.getConnectTimeoutMillis());
+        options.setAutoReconnect(true);
+
+        // 3. Authentication
+        BindRequest bindRequest = new SimpleBindRequest(properties.getBindDn(), properties.getBindPassword());
+
+        // 4. Pool Initialization
+        LDAPConnectionPool pool = new LDAPConnectionPool(failoverSet, bindRequest, 
+                properties.getInitialConnections(), properties.getMaxConnections());
+
+        // 5. TTL & Monitoring
+        pool.setMaxConnectionAgeMillis(properties.getMaxAgeMillis());
+        pool.setHealthCheck(new EnterpriseLdapHealthCheck(properties.getHealthCheckEntryDn()));
+        
+        return pool;
+    }
+}
