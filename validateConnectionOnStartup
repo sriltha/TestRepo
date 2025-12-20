@@ -1,0 +1,10 @@
+@PostConstruct
+public void validateConnectionOnStartup() {
+    try (LDAPConnection conn = ldapPool.getConnection()) {
+        log.info("Initial LDAP Connection verified via SSL/TLS.");
+    } catch (LDAPException e) {
+        log.error("LDAP Startup Validation Failed: Check Certificates.");
+        // Throwing an exception here prevents the application from starting
+        throw new RuntimeException("LDAP Init Failure", e);
+    }
+}
