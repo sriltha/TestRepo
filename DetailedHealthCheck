@@ -1,0 +1,16 @@
+import com.unboundid.ldap.sdk.*;
+
+// Custom Health Check to log failures
+public class DetailedHealthCheck extends GetEntryLDAPConnectionPoolHealthCheck {
+    
+    @Override
+    public void ensureConnectionValidAfterException(LDAPConnection connection, LDAPException exception) 
+            throws LDAPException {
+        // This triggers when a connection error occurs (e.g., during failover)
+        System.err.println("Connection Error Detected: " + exception.getResultCode());
+        System.err.println("Failed Server: " + connection.getConnectedAddress());
+        
+        // Let the super class handle the logic to invalidate the connection
+        super.ensureConnectionValidAfterException(connection, exception);
+    }
+}
