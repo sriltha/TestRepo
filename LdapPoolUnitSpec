@@ -1,0 +1,53 @@
+package com.enterprise.ldap.config;
+
+import com.unboundid.ldap.listener.InMemoryDirectoryServer;
+import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
+import com.unboundid.ldap.sdk.*;
+import org.junit.jupiter.api.*;
+import java.util.Collections;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class LdapPoolUnitSpec {
+
+    private InMemoryDirectoryServer ds;
+    private LdapProperties properties;
+    private LdapAutoConfiguration config;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        // Start In-Memory LDAP
+        InMemoryDirectoryServerConfig dsConfig = new InMemoryDirectoryServerConfig("dc=example,dc=com");
+        dsConfig.addAdditionalBindCredentials("cn=admin", "password");
+        ds = new InMemoryDirectoryServer(dsConfig);
+        ds.startListening();
+
+        properties = new LdapProperties();
+        properties.setUrls(Collections.singletonList("localhost:" + ds.getListenPort()));
+        properties.setBindDn("cn=admin");
+        properties.setBindPassword("password");
+        properties.setTtlMillis(1000L);
+        
+        config = new LdapAutoConfiguration();
+    }
+
+    @AfterEach
+    void tearDown() {
+        ds.shutDown(true);
+    }
+
+    @Test
+    @DisplayName("Should initialize pool and execute a basic search")
+    void testPoolInitialization() throws LDAPException {
+        LDAPConnectionPool pool = config.ldapConnectionPool(properties);
+        
+        assertNotNull(pool);
+        assertEquals(properties.getBindDn(), pool.getBindRequest().getBindDN());
+        
+        // Test connectivity
+        SearchResult result = pool.search("dc=example,dc=com", SearchScope.BASE, "(objectClass=*)");
+        assertEquals(ResultCode.SUCCESS, result.getResultCode());
+        
+        pool.close();
+    }
+}
